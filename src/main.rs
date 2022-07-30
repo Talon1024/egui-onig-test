@@ -131,11 +131,11 @@ impl eframe::App for MyEguiApp {
 				let coloured_format = |hue| {
 					TextFormat {
 						color: match hue {
-							v if v > 0. && v <= 1. => hue_to_rgb(hue),
+							v if v > 0. && v <= HUE_MAX => hue_to_rgb(hue),
 							_ => ui.style().visuals.text_color(),
 						},
 						font_id: match self.test_text_monospace {
-							true => FontId::monospace(14.),
+							true => FontId::monospace(16.),
 							false => FontId::default()
 						},
 						..Default::default()
