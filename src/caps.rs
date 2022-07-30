@@ -138,7 +138,7 @@ mod tests {
 	#[test]
 	fn capture_info_fill_a() {
 		// sa(u)er(k)raut
-		// all sauerkraut
+		// all sauerkraut wooff
 		let text_len = 20;
 		let caps = vec![
 			CaptureInfo {group: Some(0), range: (4, 14)},
@@ -163,7 +163,7 @@ mod tests {
 	#[test]
 	fn capture_info_fill_b() {
 		// ((s)au)er(k)rau(t)
-		// all sauerkraut
+		// all sauerkraut wooff
 		let text_len = 20;
 		let caps = vec![
 			CaptureInfo {group: Some(0), range: (4, 14)},
