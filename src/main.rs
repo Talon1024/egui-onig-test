@@ -95,7 +95,7 @@ impl eframe::App for MyEguiApp {
 			ui.horizontal(|ui| {
 	ui.label("Regex:");
 	let regex_is_valid = self.regex.is_some();
-	let mut regex_layouter = |ui: &egui::Ui, text: &str, wrap_width| {
+	let mut layouter = |ui: &egui::Ui, text: &str, wrap_width| {
 		let mut layout_job = LayoutJob::default();
 		layout_job.wrap.max_width = wrap_width;
 		layout_job.append(text, 0., TextFormat {
@@ -110,7 +110,7 @@ impl eframe::App for MyEguiApp {
 		ui.fonts().layout_job(layout_job)
 	};
 	let text_edit = egui::TextEdit::singleline(&mut self.regex_str)
-		.layouter(&mut regex_layouter).code_editor();
+		.layouter(&mut layouter).code_editor();
 	if ui.add(text_edit).changed() {
 		// If you have a nested closure that borrows self with a capture, that
 		// borrow lasts for the entire outer closure.
@@ -125,45 +125,47 @@ impl eframe::App for MyEguiApp {
 			ui.horizontal(|ui| {
 				ui.checkbox(&mut self.test_text_monospace, "Monospace");
 			});
-			let mut test_text_layouter = |ui: &egui::Ui, text: &str, wrap_width| {
-				let mut layout_job = LayoutJob::default();
-				layout_job.wrap.max_width = wrap_width;
-				let coloured_format = |hue| {
-					TextFormat {
-						color: match hue {
-							v if v > 0. && v <= HUE_MAX => hue_to_rgb(hue),
-							_ => ui.style().visuals.text_color(),
-						},
-						font_id: match self.test_text_monospace {
-							true => FontId::monospace(16.),
-							false => FontId::default()
-						},
-						..Default::default()
-					}
-				};
-				if let Some(caps) = self.test_captures.as_ref() {
-					caps.iter().for_each(|cap| {
-						let range = cap.range.0..cap.range.1;
-						let hue = match cap.group {
-							Some(g) => HUE_MIN * ((g + 1) as f32).rem_euclid(HUE_MAX),
-							None => 0.,
-						};
-						if let Some(tslice) = text.get(range) {
-							layout_job.append(tslice, 0.,
-								coloured_format(hue));
-						}
-					});
-				} else {
-					layout_job.append(text, 0., coloured_format(0.));
-				}
-				ui.fonts().layout_job(layout_job)
-			};
 			ui.label("Test text:");
-			if ui.add_sized(ui.available_size(), egui::TextEdit
-				::multiline(&mut self.test_text)
-				.layouter(&mut test_text_layouter)).changed() {
-				self.test_captures = update_text(self.regex.as_ref(), &self.test_text);
-			};
+			egui::ScrollArea::vertical().show(ui, |ui| {
+				let mut layouter = |ui: &egui::Ui, text: &str, wrap_width| {
+					let mut layout_job = LayoutJob::default();
+					layout_job.wrap.max_width = wrap_width;
+					let coloured_format = |hue| {
+						TextFormat {
+							color: match hue {
+								v if v > 0. && v <= HUE_MAX => hue_to_rgb(hue),
+								_ => ui.style().visuals.text_color(),
+							},
+							font_id: match self.test_text_monospace {
+								true => FontId::monospace(16.),
+								false => FontId::proportional(16.)
+							},
+							..Default::default()
+						}
+					};
+					if let Some(caps) = self.test_captures.as_ref() {
+						caps.iter().for_each(|cap| {
+							let range = cap.range.0..cap.range.1;
+							let hue = match cap.group {
+								Some(g) => HUE_MIN * ((g + 1) as f32).rem_euclid(HUE_MAX),
+								None => 0.,
+							};
+							if let Some(tslice) = text.get(range) {
+								layout_job.append(tslice, 0.,
+									coloured_format(hue));
+							}
+						});
+					} else {
+						layout_job.append(text, 0., coloured_format(0.));
+					}
+					ui.fonts().layout_job(layout_job)
+				};
+				let text_edit = egui::TextEdit::multiline(&mut self.test_text)
+					.layouter(&mut layouter);
+				if ui.add_sized(ui.available_size(), text_edit).changed() {
+					self.test_captures = update_text(self.regex.as_ref(), &self.test_text);
+				}
+			});
 		});
 	}
 }
