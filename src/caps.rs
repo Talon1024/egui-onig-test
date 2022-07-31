@@ -131,9 +131,19 @@ impl Iterator for CaptureInfoFillIter {
 	}
 }
 
+impl From<(usize, usize, usize)> for CaptureInfo {
+	fn from(v: (usize, usize, usize)) -> Self {
+		Self {
+			group: Some(v.0),
+			range: (v.1, v.2),
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::error::Error;
 
 	#[test]
 	fn capture_info_fill_a() {
@@ -187,13 +197,22 @@ mod tests {
 		assert_eq!(expected.len(), actual.len());
 		assert_eq!(expected, actual);
 	}
-}
 
-impl From<(usize, usize, usize)> for CaptureInfo {
-	fn from(v: (usize, usize, usize)) -> Self {
-		Self {
-			group: Some(v.0),
-			range: (v.1, v.2),
-		}
+	#[test]
+	fn string_regex() -> Result<(), Box<dyn Error>> {
+		use onig::Regex;
+		let regex = Regex::new("\"(\\\\\\\"|[^\"])*\"")?;
+		let test_text = "str saying = \"Pedal to the metal\";";
+		let text_len = test_text.len();
+		let test_captures = regex.captures_iter(test_text).flat_map(|found| {
+			found.iter_pos().enumerate().filter_map(|(group_index, group)| {
+				group.map(|(start, end)| CaptureInfo::from((group_index, start, end)))
+			}).collect::<Vec<CaptureInfo>>()
+		}).collect::<Vec<CaptureInfo>>();
+		println!("test_captures before:\n{:?}\n\n\n", test_captures);
+		let test_captures: Vec<CaptureInfo> = CaptureInfoFillIter::new(
+			test_captures, text_len).collect();
+		println!("test_captures after:\n{:?}\n\n\n", test_captures);
+		Ok(())
 	}
 }

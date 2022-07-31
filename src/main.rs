@@ -113,7 +113,8 @@ impl eframe::App for MyEguiApp {
 		.layouter(&mut layouter).code_editor();
 	if ui.add(text_edit).changed() {
 		// If you have a nested closure that borrows self with a capture, that
-		// borrow lasts for the entire outer closure.
+		// borrow lasts for the entire outer scope. Why? I think it's because
+		// closures are variables.
 		// I worked around the borrow check by taking advantage of passing
 		// values/references to and returning values from the closure.
 		(self.regex, self.test_captures, self.regex_error) = update_regex(&self.regex_str, &self.test_text);
