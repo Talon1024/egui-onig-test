@@ -43,6 +43,7 @@ struct MyEguiApp {
 	test_text: String,
 	test_captures: Option<Vec<CaptureInfo>>,
 	test_text_monospace: bool, // TODO: Make this a FontId
+	test_text_size: f32,
 }
 
 impl MyEguiApp {
@@ -51,7 +52,10 @@ impl MyEguiApp {
 		// Restore app state using cc.storage (requires the "persistence" feature).
 		// Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
 		// for e.g. egui::PaintCallback.
-		Self::default()
+		Self {
+			test_text_size: 14.,
+			..Default::default()
+		}
 	}
 }
 
@@ -125,6 +129,8 @@ impl eframe::App for MyEguiApp {
 			}
 			ui.horizontal(|ui| {
 				ui.checkbox(&mut self.test_text_monospace, "Monospace");
+				ui.add(egui::Slider::new(&mut self.test_text_size, 10.0..=36.0)
+				.step_by(1.0).suffix("px").text("Size"));
 			});
 			ui.label("Test text:");
 			egui::ScrollArea::vertical().show(ui, |ui| {
@@ -138,8 +144,8 @@ impl eframe::App for MyEguiApp {
 								_ => ui.style().visuals.text_color(),
 							},
 							font_id: match self.test_text_monospace {
-								true => FontId::monospace(16.),
-								false => FontId::proportional(16.)
+								true => FontId::monospace(self.test_text_size),
+								false => FontId::proportional(self.test_text_size)
 							},
 							..Default::default()
 						}
