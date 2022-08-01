@@ -97,18 +97,17 @@ impl Iterator for CaptureInfoFillIter {
 						self.groups.push_back(ep.group);
 					},
 					End => {
-						let group = self.groups.back().copied();
 						if matches!(group, Some(g) if g != ep.group) {
 							panic!("group {:?} != ep.group {}", group, ep.group);
 						}
 						self.groups.pop_back();
 					},
 				}
-				let prev_pos = self.pos;
-				self.pos = ep.pos;
-				if prev_pos == ep.pos {
+				if self.pos == ep.pos {
 					continue;
 				}
+				let prev_pos = self.pos;
+				self.pos = ep.pos;
 				break Some(CaptureInfo {
 					group,
 					range: (prev_pos, self.pos),
