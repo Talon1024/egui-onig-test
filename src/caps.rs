@@ -21,6 +21,19 @@ pub struct CaptureInfoFillIter {
 
 impl CaptureInfoFillIter {
 	pub fn new(citems: Vec<CaptureInfo>, text_len: usize) -> Self {
+		let mut items = CaptureInfoFillIter::endpoint_list(&citems);
+		items.sort_unstable();
+		// println!("{:?}", items);
+		items.reverse();
+		Self {
+			text_len,
+			items,
+			pos: 0,
+			groups: VecDeque::new(),
+		}
+	}
+
+	fn endpoint_list(citems: &Vec<CaptureInfo>) -> Vec<EndPoint> {
 		let mut items: Vec<EndPoint> = Vec::new();
 		citems.iter().for_each(|item| {
 			if let Some(group) = item.group {
@@ -36,15 +49,7 @@ impl CaptureInfoFillIter {
 				});
 			}
 		});
-		items.sort_unstable();
-		// println!("{:?}", items);
-		items.reverse();
-		Self {
-			text_len,
-			items,
-			pos: 0,
-			groups: VecDeque::new(),
-		}
+		items
 	}
 }
 
@@ -56,7 +61,7 @@ struct EndPoint {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum EndPointType {
 	Start,
 	End,
@@ -171,7 +176,7 @@ mod tests {
 
 	#[test]
 	fn capture_info_fill_b() {
-		// ((s)au)er(k)rau(t)
+		// ((s)au)er(k)ra(u(t))
 		// all sauerkraut wooff
 		let text_len = 20;
 		let caps = vec![
@@ -179,7 +184,8 @@ mod tests {
 			CaptureInfo {group: Some(1), range: (4, 7)},
 			CaptureInfo {group: Some(2), range: (4, 5)},
 			CaptureInfo {group: Some(3), range: (9, 10)},
-			CaptureInfo {group: Some(4), range: (13, 14)},
+			CaptureInfo {group: Some(4), range: (12, 14)},
+			CaptureInfo {group: Some(5), range: (13, 14)},
 		];
 		let expected = vec![
 			CaptureInfo { group: None, range: (0, 4)},
@@ -187,8 +193,9 @@ mod tests {
 			CaptureInfo { group: Some(1), range: (5, 7)},
 			CaptureInfo { group: Some(0), range: (7, 9)},
 			CaptureInfo { group: Some(3), range: (9, 10)},
-			CaptureInfo { group: Some(0), range: (10, 13)},
-			CaptureInfo { group: Some(4), range: (13, 14)},
+			CaptureInfo { group: Some(0), range: (10, 12)},
+			CaptureInfo { group: Some(4), range: (12, 13)},
+			CaptureInfo { group: Some(5), range: (13, 14)},
 			CaptureInfo { group: None, range: (14, 20)},
 		];
 		let filler = CaptureInfoFillIter::new(caps, text_len);
@@ -212,6 +219,44 @@ mod tests {
 		let test_captures: Vec<CaptureInfo> = CaptureInfoFillIter::new(
 			test_captures, text_len).collect();
 		println!("test_captures after:\n{:?}\n\n\n", test_captures);
+		Ok(())
+	}
+
+	#[test]
+	fn endpoint_order() -> Result<(), Box<dyn Error>> {
+		// ((s)au)er(k)ra(u(t))
+		// all sauerkraut wooff
+		use EndPointType::*;
+		let mut endpoints = vec![
+			EndPoint {group: 0, pos: 4, etype: Start},
+			EndPoint {group: 0, pos: 14, etype: End},
+			EndPoint {group: 1, pos: 4, etype: Start},
+			EndPoint {group: 1, pos: 7, etype: End},
+			EndPoint {group: 2, pos: 4, etype: Start},
+			EndPoint {group: 2, pos: 5, etype: End},
+			EndPoint {group: 3, pos: 9, etype: Start},
+			EndPoint {group: 3, pos: 10, etype: End},
+			EndPoint {group: 4, pos: 12, etype: Start},
+			EndPoint {group: 4, pos: 14, etype: End},
+			EndPoint {group: 5, pos: 13, etype: Start},
+			EndPoint {group: 5, pos: 14, etype: End},
+		];
+		let expected = vec![
+			EndPoint {group: 0, pos: 4, etype: Start},
+			EndPoint {group: 1, pos: 4, etype: Start},
+			EndPoint {group: 2, pos: 4, etype: Start},
+			EndPoint {group: 2, pos: 5, etype: End},
+			EndPoint {group: 1, pos: 7, etype: End},
+			EndPoint {group: 3, pos: 9, etype: Start},
+			EndPoint {group: 3, pos: 10, etype: End},
+			EndPoint {group: 4, pos: 12, etype: Start},
+			EndPoint {group: 5, pos: 13, etype: Start},
+			EndPoint {group: 5, pos: 14, etype: End},
+			EndPoint {group: 4, pos: 14, etype: End},
+			EndPoint {group: 0, pos: 14, etype: End},
+		];
+		endpoints.sort_unstable();
+		assert_eq!(expected, endpoints);
 		Ok(())
 	}
 }
