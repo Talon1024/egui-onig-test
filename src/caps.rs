@@ -73,11 +73,23 @@ impl PartialOrd for EndPoint {
 		let pos_order = self.pos.partial_cmp(&other.pos);
 		if let Some(Equal) = pos_order {
 			let order = self.group.partial_cmp(&other.group);
+			// Group 0 is the boundary of a whole group, so some special
+			// considerations are necessary.
 			match (self.etype, other.etype) {
 				(Start, Start) => order,
-				(Start, End) => Some(Less),
+				(Start, End) => {
+					match (self.group, other.group) {
+						(0, 0) => Some(Greater),
+						_ => Some(Less),
+					}
+				},
 				(End, End) => order.map(Ordering::reverse),
-				(End, Start) => Some(Greater),
+				(End, Start) => {
+					match (self.group, other.group) {
+						(0, 0) => Some(Less),
+						_ => Some(Greater),
+					}
+				},
 			}
 		} else {
 			pos_order
@@ -293,6 +305,34 @@ mod tests {
 			EndPoint {group: 2, pos: 5, etype: End},
 			EndPoint {group: 1, pos: 5, etype: End},
 			EndPoint {group: 0, pos: 14, etype: End},
+		];
+		endpoints.sort_unstable();
+		assert_eq!(expected, endpoints);
+		Ok(())
+	}
+
+	#[test]
+	fn endpoint_order_2() -> Result<(), Box<dyn Error>> {
+		use EndPointType::*;
+		let mut endpoints = vec![
+			EndPoint {group: 0, pos: 0, etype: Start},
+			EndPoint {group: 0, pos: 6, etype: End},
+			EndPoint {group: 1, pos: 0, etype: Start},
+			EndPoint {group: 1, pos: 5, etype: End},
+			EndPoint {group: 0, pos: 6, etype: Start},
+			EndPoint {group: 0, pos: 12, etype: End},
+			EndPoint {group: 1, pos: 6, etype: Start},
+			EndPoint {group: 1, pos: 11, etype: End},
+		];
+		let expected = vec![
+			EndPoint {group: 0, pos: 0, etype: Start},
+			EndPoint {group: 1, pos: 0, etype: Start},
+			EndPoint {group: 1, pos: 5, etype: End},
+			EndPoint {group: 0, pos: 6, etype: End},
+			EndPoint {group: 0, pos: 6, etype: Start},
+			EndPoint {group: 1, pos: 6, etype: Start},
+			EndPoint {group: 1, pos: 11, etype: End},
+			EndPoint {group: 0, pos: 12, etype: End},
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
