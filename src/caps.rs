@@ -23,7 +23,7 @@ impl CaptureInfoFillIter {
 	pub fn new(citems: Vec<CaptureInfo>, text_len: usize) -> Self {
 		let mut items = CaptureInfoFillIter::endpoint_list(&citems);
 		items.sort_unstable();
-		// println!("{:?}", items);
+		// println!("\n\n\n\n\n{:#?}", items);
 		items.reverse();
 		Self {
 			text_len,
@@ -69,13 +69,16 @@ enum EndPointType {
 
 impl PartialOrd for EndPoint {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		use EndPointType::*;
 		let pos_order = self.pos.partial_cmp(&other.pos);
 		if let Some(Equal) = pos_order {
-			let mut order = self.group.partial_cmp(&other.group);
-			if self.etype == EndPointType::End {
-				order = order.map(Ordering::reverse);
+			let order = self.group.partial_cmp(&other.group);
+			match (self.etype, other.etype) {
+				(Start, Start) => order,
+				(Start, End) => Some(Less),
+				(End, End) => order.map(Ordering::reverse),
+				(End, Start) => Some(Greater),
 			}
-			order
 		} else {
 			pos_order
 		}
@@ -207,8 +210,8 @@ mod tests {
 	#[test]
 	fn string_regex() -> Result<(), Box<dyn Error>> {
 		use onig::Regex;
-		let regex = Regex::new("\"(\\\\\\\"|[^\"])*\"")?;
-		let test_text = "str saying = \"Pedal to the metal\";";
+		let regex = Regex::new("(\\w+)\\s")?;
+		let test_text = "Three words panic";
 		let text_len = test_text.len();
 		let test_captures = regex.captures_iter(test_text).flat_map(|found| {
 			found.iter_pos().enumerate().filter_map(|(group_index, group)| {
@@ -253,6 +256,42 @@ mod tests {
 			EndPoint {group: 5, pos: 13, etype: Start},
 			EndPoint {group: 5, pos: 14, etype: End},
 			EndPoint {group: 4, pos: 14, etype: End},
+			EndPoint {group: 0, pos: 14, etype: End},
+		];
+		endpoints.sort_unstable();
+		assert_eq!(expected, endpoints);
+		Ok(())
+	}
+
+	#[test]
+	fn endpoint_order_at_same_pos() -> Result<(), Box<dyn Error>> {
+		use EndPointType::*;
+		let mut endpoints = vec![
+			EndPoint {group: 0, pos: 4, etype: Start},
+			EndPoint {group: 0, pos: 14, etype: End},
+			EndPoint {group: 5, pos: 5, etype: Start},
+			EndPoint {group: 5, pos: 5, etype: End},
+			EndPoint {group: 1, pos: 5, etype: Start},
+			EndPoint {group: 1, pos: 5, etype: End},
+			EndPoint {group: 3, pos: 5, etype: Start},
+			EndPoint {group: 3, pos: 5, etype: End},
+			EndPoint {group: 4, pos: 5, etype: Start},
+			EndPoint {group: 4, pos: 5, etype: End},
+			EndPoint {group: 2, pos: 5, etype: Start},
+			EndPoint {group: 2, pos: 5, etype: End},
+		];
+		let expected = vec![
+			EndPoint {group: 0, pos: 4, etype: Start},
+			EndPoint {group: 1, pos: 5, etype: Start},
+			EndPoint {group: 2, pos: 5, etype: Start},
+			EndPoint {group: 3, pos: 5, etype: Start},
+			EndPoint {group: 4, pos: 5, etype: Start},
+			EndPoint {group: 5, pos: 5, etype: Start},
+			EndPoint {group: 5, pos: 5, etype: End},
+			EndPoint {group: 4, pos: 5, etype: End},
+			EndPoint {group: 3, pos: 5, etype: End},
+			EndPoint {group: 2, pos: 5, etype: End},
+			EndPoint {group: 1, pos: 5, etype: End},
 			EndPoint {group: 0, pos: 14, etype: End},
 		];
 		endpoints.sort_unstable();
