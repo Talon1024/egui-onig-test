@@ -66,12 +66,12 @@ impl eframe::App for MyEguiApp {
 		let update_text = |regex: Option<&Regex>, test_text: &str| {
 			let text_len = test_text.len();
 			if let Some(regex) = regex {
-				let test_captures = regex.captures_iter(test_text)
-				.flat_map(|found| {
+				let test_captures = regex.captures_iter(test_text).enumerate()
+				.flat_map(|(cap_index, found)| {
 					found.iter_pos().enumerate().filter_map(|(group_index, group)| {
-						group.map(|(start, end)| CaptureInfo::from((group_index, start, end)))
-					}).collect::<Vec<CaptureInfo>>()
-				}).collect::<Vec<CaptureInfo>>();
+						group.map(|(start, end)| InputCaptureInfo::from((cap_index, group_index, start, end)))
+					}).collect::<Vec<InputCaptureInfo>>()
+				}).collect::<Vec<InputCaptureInfo>>();
 				let test_captures = CaptureInfoFillIter::new(
 					test_captures, text_len).collect();
 				// print!("\n\n\n\n\n\n\n==========\n\n");

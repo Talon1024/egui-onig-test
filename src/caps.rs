@@ -6,9 +6,20 @@ pub struct CaptureInfo {
 	pub range: (usize, usize),
 }
 
-impl CaptureInfo {
-	pub fn len(&self) -> usize {
-		self.range.1 - self.range.0
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputCaptureInfo {
+	pub mgroup: usize,
+	pub group: Option<usize>,
+	pub range: (usize, usize),
+}
+
+impl From<(usize, usize, usize, usize)> for InputCaptureInfo {
+	fn from(v: (usize, usize, usize, usize)) -> Self {
+		Self {
+			mgroup: v.0,
+			group: Some(v.1),
+			range: (v.2, v.3),
+		}
 	}
 }
 
@@ -20,7 +31,7 @@ pub struct CaptureInfoFillIter {
 }
 
 impl CaptureInfoFillIter {
-	pub fn new(citems: Vec<CaptureInfo>, text_len: usize) -> Self {
+	pub fn new(citems: Vec<InputCaptureInfo>, text_len: usize) -> Self {
 		let mut items = CaptureInfoFillIter::endpoint_list(&citems);
 		items.sort_unstable();
 		// println!("\n\n\n\n\n{:#?}", items);
@@ -33,16 +44,18 @@ impl CaptureInfoFillIter {
 		}
 	}
 
-	fn endpoint_list(citems: &Vec<CaptureInfo>) -> Vec<EndPoint> {
+	fn endpoint_list(citems: &Vec<InputCaptureInfo>) -> Vec<EndPoint> {
 		let mut items: Vec<EndPoint> = Vec::new();
 		citems.iter().for_each(|item| {
 			if let Some(group) = item.group {
 				items.push(EndPoint {
+					mgroup: item.mgroup,
 					group,
 					pos: item.range.0,
 					etype: EndPointType::Start,
 				});
 				items.push(EndPoint {
+					mgroup: item.mgroup,
 					group,
 					pos: item.range.1,
 					etype: EndPointType::End,
@@ -55,6 +68,7 @@ impl CaptureInfoFillIter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct EndPoint {
+	mgroup: usize,
 	group: usize,
 	pos: usize,
 	etype: EndPointType,
@@ -70,6 +84,8 @@ enum EndPointType {
 impl PartialOrd for EndPoint {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		use EndPointType::*;
+		let mg_order = self.mgroup.partial_cmp(&other.mgroup);
+		if let Some(Equal) = mg_order {
 		let pos_order = self.pos.partial_cmp(&other.pos);
 		if let Some(Equal) = pos_order {
 			let order = self.group.partial_cmp(&other.group);
@@ -77,23 +93,16 @@ impl PartialOrd for EndPoint {
 			// considerations are necessary.
 			match (self.etype, other.etype) {
 				(Start, Start) => order,
-				(Start, End) => {
-					match (self.group, other.group) {
-						(0, 0) => Some(Greater),
-						_ => Some(Less),
-					}
-				},
+				(Start, End) => Some(Less),
 				(End, End) => order.map(Ordering::reverse),
-				(End, Start) => {
-					match (self.group, other.group) {
-						(0, 0) => Some(Less),
-						_ => Some(Greater),
-					}
-				},
+				(End, Start) => Some(Greater),
 			}
 		} else {
 			pos_order
 		}
+	} else {
+		mg_order
+	}
 	}
 }
 
@@ -150,15 +159,6 @@ impl Iterator for CaptureInfoFillIter {
 	}
 }
 
-impl From<(usize, usize, usize)> for CaptureInfo {
-	fn from(v: (usize, usize, usize)) -> Self {
-		Self {
-			group: Some(v.0),
-			range: (v.1, v.2),
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -170,9 +170,9 @@ mod tests {
 		// all sauerkraut wooff
 		let text_len = 20;
 		let caps = vec![
-			CaptureInfo {group: Some(0), range: (4, 14)},
-			CaptureInfo {group: Some(1), range: (6, 7)},
-			CaptureInfo {group: Some(2), range: (9, 10)},
+			InputCaptureInfo {mgroup: 0, group: Some(0), range: (4, 14)},
+			InputCaptureInfo {mgroup: 0, group: Some(1), range: (6, 7)},
+			InputCaptureInfo {mgroup: 0, group: Some(2), range: (9, 10)},
 		];
 		let expected = vec![
 			CaptureInfo { group: None, range: (0, 4)},
@@ -195,12 +195,12 @@ mod tests {
 		// all sauerkraut wooff
 		let text_len = 20;
 		let caps = vec![
-			CaptureInfo {group: Some(0), range: (4, 14)},
-			CaptureInfo {group: Some(1), range: (4, 7)},
-			CaptureInfo {group: Some(2), range: (4, 5)},
-			CaptureInfo {group: Some(3), range: (9, 10)},
-			CaptureInfo {group: Some(4), range: (12, 14)},
-			CaptureInfo {group: Some(5), range: (13, 14)},
+			InputCaptureInfo {mgroup: 0, group: Some(0), range: (4, 14)},
+			InputCaptureInfo {mgroup: 0, group: Some(1), range: (4, 7)},
+			InputCaptureInfo {mgroup: 0, group: Some(2), range: (4, 5)},
+			InputCaptureInfo {mgroup: 0, group: Some(3), range: (9, 10)},
+			InputCaptureInfo {mgroup: 0, group: Some(4), range: (12, 14)},
+			InputCaptureInfo {mgroup: 0, group: Some(5), range: (13, 14)},
 		];
 		let expected = vec![
 			CaptureInfo { group: None, range: (0, 4)},
@@ -225,11 +225,13 @@ mod tests {
 		let regex = Regex::new("(\\w+)\\s")?;
 		let test_text = "Three words panic";
 		let text_len = test_text.len();
-		let test_captures = regex.captures_iter(test_text).flat_map(|found| {
+		let test_captures = regex.captures_iter(test_text).enumerate()
+		.flat_map(|(cap_group, found)| {
 			found.iter_pos().enumerate().filter_map(|(group_index, group)| {
-				group.map(|(start, end)| CaptureInfo::from((group_index, start, end)))
-			}).collect::<Vec<CaptureInfo>>()
-		}).collect::<Vec<CaptureInfo>>();
+				group.map(|(start, end)| InputCaptureInfo::from(
+					(cap_group, group_index, start, end)))
+			}).collect::<Vec<InputCaptureInfo>>()
+		}).collect::<Vec<InputCaptureInfo>>();
 		println!("test_captures before:\n{:?}\n\n\n", test_captures);
 		let test_captures: Vec<CaptureInfo> = CaptureInfoFillIter::new(
 			test_captures, text_len).collect();
@@ -243,32 +245,32 @@ mod tests {
 		// all sauerkraut wooff
 		use EndPointType::*;
 		let mut endpoints = vec![
-			EndPoint {group: 0, pos: 4, etype: Start},
-			EndPoint {group: 0, pos: 14, etype: End},
-			EndPoint {group: 1, pos: 4, etype: Start},
-			EndPoint {group: 1, pos: 7, etype: End},
-			EndPoint {group: 2, pos: 4, etype: Start},
-			EndPoint {group: 2, pos: 5, etype: End},
-			EndPoint {group: 3, pos: 9, etype: Start},
-			EndPoint {group: 3, pos: 10, etype: End},
-			EndPoint {group: 4, pos: 12, etype: Start},
-			EndPoint {group: 4, pos: 14, etype: End},
-			EndPoint {group: 5, pos: 13, etype: Start},
-			EndPoint {group: 5, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 0, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 1, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 7, etype: End},
+			EndPoint {mgroup: 0, group: 2, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 3, pos: 9, etype: Start},
+			EndPoint {mgroup: 0, group: 3, pos: 10, etype: End},
+			EndPoint {mgroup: 0, group: 4, pos: 12, etype: Start},
+			EndPoint {mgroup: 0, group: 4, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 5, pos: 13, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 14, etype: End},
 		];
 		let expected = vec![
-			EndPoint {group: 0, pos: 4, etype: Start},
-			EndPoint {group: 1, pos: 4, etype: Start},
-			EndPoint {group: 2, pos: 4, etype: Start},
-			EndPoint {group: 2, pos: 5, etype: End},
-			EndPoint {group: 1, pos: 7, etype: End},
-			EndPoint {group: 3, pos: 9, etype: Start},
-			EndPoint {group: 3, pos: 10, etype: End},
-			EndPoint {group: 4, pos: 12, etype: Start},
-			EndPoint {group: 5, pos: 13, etype: Start},
-			EndPoint {group: 5, pos: 14, etype: End},
-			EndPoint {group: 4, pos: 14, etype: End},
-			EndPoint {group: 0, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 2, pos: 4, etype: Start},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 1, pos: 7, etype: End},
+			EndPoint {mgroup: 0, group: 3, pos: 9, etype: Start},
+			EndPoint {mgroup: 0, group: 3, pos: 10, etype: End},
+			EndPoint {mgroup: 0, group: 4, pos: 12, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 13, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 4, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 14, etype: End},
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
@@ -279,32 +281,32 @@ mod tests {
 	fn endpoint_order_at_same_pos() -> Result<(), Box<dyn Error>> {
 		use EndPointType::*;
 		let mut endpoints = vec![
-			EndPoint {group: 0, pos: 4, etype: Start},
-			EndPoint {group: 0, pos: 14, etype: End},
-			EndPoint {group: 5, pos: 5, etype: Start},
-			EndPoint {group: 5, pos: 5, etype: End},
-			EndPoint {group: 1, pos: 5, etype: Start},
-			EndPoint {group: 1, pos: 5, etype: End},
-			EndPoint {group: 3, pos: 5, etype: Start},
-			EndPoint {group: 3, pos: 5, etype: End},
-			EndPoint {group: 4, pos: 5, etype: Start},
-			EndPoint {group: 4, pos: 5, etype: End},
-			EndPoint {group: 2, pos: 5, etype: Start},
-			EndPoint {group: 2, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 0, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 5, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 3, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 3, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 4, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 4, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
 		];
 		let expected = vec![
-			EndPoint {group: 0, pos: 4, etype: Start},
-			EndPoint {group: 1, pos: 5, etype: Start},
-			EndPoint {group: 2, pos: 5, etype: Start},
-			EndPoint {group: 3, pos: 5, etype: Start},
-			EndPoint {group: 4, pos: 5, etype: Start},
-			EndPoint {group: 5, pos: 5, etype: Start},
-			EndPoint {group: 5, pos: 5, etype: End},
-			EndPoint {group: 4, pos: 5, etype: End},
-			EndPoint {group: 3, pos: 5, etype: End},
-			EndPoint {group: 2, pos: 5, etype: End},
-			EndPoint {group: 1, pos: 5, etype: End},
-			EndPoint {group: 0, pos: 14, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 3, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 4, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 5, etype: Start},
+			EndPoint {mgroup: 0, group: 5, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 4, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 3, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 5, etype: End},
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
@@ -315,24 +317,24 @@ mod tests {
 	fn endpoint_order_2() -> Result<(), Box<dyn Error>> {
 		use EndPointType::*;
 		let mut endpoints = vec![
-			EndPoint {group: 0, pos: 0, etype: Start},
-			EndPoint {group: 0, pos: 6, etype: End},
-			EndPoint {group: 1, pos: 0, etype: Start},
-			EndPoint {group: 1, pos: 5, etype: End},
-			EndPoint {group: 0, pos: 6, etype: Start},
-			EndPoint {group: 0, pos: 12, etype: End},
-			EndPoint {group: 1, pos: 6, etype: Start},
-			EndPoint {group: 1, pos: 11, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 0, etype: Start},
+			EndPoint {mgroup: 0, group: 0, pos: 6, etype: End},
+			EndPoint {mgroup: 0, group: 1, pos: 0, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: End},
+			EndPoint {mgroup: 1, group: 0, pos: 6, etype: Start},
+			EndPoint {mgroup: 1, group: 0, pos: 12, etype: End},
+			EndPoint {mgroup: 1, group: 1, pos: 6, etype: Start},
+			EndPoint {mgroup: 1, group: 1, pos: 11, etype: End},
 		];
 		let expected = vec![
-			EndPoint {group: 0, pos: 0, etype: Start},
-			EndPoint {group: 1, pos: 0, etype: Start},
-			EndPoint {group: 1, pos: 5, etype: End},
-			EndPoint {group: 0, pos: 6, etype: End},
-			EndPoint {group: 0, pos: 6, etype: Start},
-			EndPoint {group: 1, pos: 6, etype: Start},
-			EndPoint {group: 1, pos: 11, etype: End},
-			EndPoint {group: 0, pos: 12, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 0, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 0, etype: Start},
+			EndPoint {mgroup: 0, group: 1, pos: 5, etype: End},
+			EndPoint {mgroup: 0, group: 0, pos: 6, etype: End},
+			EndPoint {mgroup: 1, group: 0, pos: 6, etype: Start},
+			EndPoint {mgroup: 1, group: 1, pos: 6, etype: Start},
+			EndPoint {mgroup: 1, group: 1, pos: 11, etype: End},
+			EndPoint {mgroup: 1, group: 0, pos: 12, etype: End},
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
