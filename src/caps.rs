@@ -34,7 +34,9 @@ impl CaptureInfoFillIter {
 	pub fn new(citems: Vec<InputCaptureInfo>, text_len: usize) -> Self {
 		let mut items = CaptureInfoFillIter::endpoint_list(&citems);
 		items.sort_unstable();
-		// println!("\n\n\n\n\n{:#?}", items);
+		if cfg!(test) {
+			println!("\n\n\n\n\n{:?}", items);
+		}
 		items.reverse();
 		Self {
 			text_len,
@@ -88,14 +90,10 @@ impl PartialOrd for EndPoint {
 		if let Some(Equal) = mg_order {
 		let pos_order = self.pos.partial_cmp(&other.pos);
 		if let Some(Equal) = pos_order {
-			let order = self.group.partial_cmp(&other.group);
-			// Group 0 is the boundary of a whole group, so some special
-			// considerations are necessary.
+			let gorder = self.group.partial_cmp(&other.group);
 			match (self.etype, other.etype) {
-				(Start, Start) => order,
-				(Start, End) => Some(Less),
-				(End, End) => order.map(Ordering::reverse),
-				(End, Start) => Some(Greater),
+				(Start, _) => gorder,
+				(End, _) => gorder.map(Ordering::reverse),
 			}
 		} else {
 			pos_order
@@ -165,7 +163,7 @@ mod tests {
 	use std::error::Error;
 
 	#[test]
-	fn capture_info_fill_a() {
+	fn capture_info_fill_no_ends() {
 		// sa(u)er(k)raut
 		// all sauerkraut wooff
 		let text_len = 20;
@@ -190,7 +188,7 @@ mod tests {
 	}
 
 	#[test]
-	fn capture_info_fill_b() {
+	fn capture_info_fill_with_ends() {
 		// ((s)au)er(k)ra(u(t))
 		// all sauerkraut wooff
 		let text_len = 20;
@@ -223,6 +221,26 @@ mod tests {
 	fn string_regex() -> Result<(), Box<dyn Error>> {
 		use onig::Regex;
 		let regex = Regex::new("(\\w+)\\s")?;
+		let test_text = "Three words panic";
+		let text_len = test_text.len();
+		let test_captures = regex.captures_iter(test_text).enumerate()
+		.flat_map(|(cap_group, found)| {
+			found.iter_pos().enumerate().filter_map(|(group_index, group)| {
+				group.map(|(start, end)| InputCaptureInfo::from(
+					(cap_group, group_index, start, end)))
+			}).collect::<Vec<InputCaptureInfo>>()
+		}).collect::<Vec<InputCaptureInfo>>();
+		println!("test_captures before:\n{:?}\n\n\n", test_captures);
+		let test_captures: Vec<CaptureInfo> = CaptureInfoFillIter::new(
+			test_captures, text_len).collect();
+		println!("test_captures after:\n{:?}\n\n\n", test_captures);
+		Ok(())
+	}
+
+	#[test]
+	fn string_regex_whole() -> Result<(), Box<dyn Error>> {
+		use onig::Regex;
+		let regex = Regex::new("(\\w+)(\\s)")?;
 		let test_text = "Three words panic";
 		let text_len = test_text.len();
 		let test_captures = regex.captures_iter(test_text).enumerate()
@@ -274,7 +292,7 @@ mod tests {
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
-		Ok(())
+		test_group_stack(&endpoints)
 	}
 
 	#[test]
@@ -294,27 +312,12 @@ mod tests {
 			EndPoint {mgroup: 0, group: 2, pos: 5, etype: Start},
 			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
 		];
-		let expected = vec![
-			EndPoint {mgroup: 0, group: 0, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 1, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 2, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 3, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 4, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 5, pos: 5, etype: Start},
-			EndPoint {mgroup: 0, group: 5, pos: 5, etype: End},
-			EndPoint {mgroup: 0, group: 4, pos: 5, etype: End},
-			EndPoint {mgroup: 0, group: 3, pos: 5, etype: End},
-			EndPoint {mgroup: 0, group: 2, pos: 5, etype: End},
-			EndPoint {mgroup: 0, group: 1, pos: 5, etype: End},
-			EndPoint {mgroup: 0, group: 0, pos: 5, etype: End},
-		];
 		endpoints.sort_unstable();
-		assert_eq!(expected, endpoints);
-		Ok(())
+		test_group_stack(&endpoints)
 	}
 
 	#[test]
-	fn endpoint_order_2() -> Result<(), Box<dyn Error>> {
+	fn endpoint_order_multiple_mgroups() -> Result<(), Box<dyn Error>> {
 		use EndPointType::*;
 		let mut endpoints = vec![
 			EndPoint {mgroup: 0, group: 0, pos: 0, etype: Start},
@@ -338,6 +341,33 @@ mod tests {
 		];
 		endpoints.sort_unstable();
 		assert_eq!(expected, endpoints);
-		Ok(())
+		test_group_stack(&endpoints)
+	}
+
+	fn test_group_stack(endpoints: &[EndPoint]) -> Result<(), Box<dyn Error>> {
+		use EndPointType::*;
+		let mut group_stack = VecDeque::new();
+		endpoints.iter().map(|ep| {
+			match ep.etype {
+				Start => {
+					group_stack.push_back(ep.group);
+					Ok(())
+				},
+				End => {
+					let group = group_stack.back().copied();
+					if let Some(group) = group {
+						if group != ep.group {
+	return Err(Box::from(format!(
+		"Wrong group! Expected {}, got {}",
+		group, ep.group)));
+						}
+						group_stack.pop_back();
+						Ok(())
+					} else {
+						Err(Box::from(format!("Empty group stack!")))
+					}
+				}
+			}
+		}).collect()
 	}
 }
