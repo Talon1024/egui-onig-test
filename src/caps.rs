@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, cmp::Ordering::{self, *}};
+use std::{cmp::Ordering::{self, *}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CaptureInfo {
@@ -27,7 +27,7 @@ pub struct CaptureInfoFillIter {
 	text_len: usize,
 	items: Vec<EndPoint>,
 	pos: usize,
-	groups: VecDeque<usize>
+	groups: Vec<usize>
 }
 
 impl CaptureInfoFillIter {
@@ -42,7 +42,7 @@ impl CaptureInfoFillIter {
 			text_len,
 			items,
 			pos: 0,
-			groups: VecDeque::new(),
+			groups: Vec::new(),
 		}
 	}
 
@@ -118,16 +118,16 @@ impl Iterator for CaptureInfoFillIter {
 		let next_endpoint = self.items.pop();
 		match next_endpoint {
 			Some(ep) => {
-				let group = self.groups.back().copied();
+				let group = self.groups.last().copied();
 				match ep.etype {
 					Start => {
-						self.groups.push_back(ep.group);
+						self.groups.push(ep.group);
 					},
 					End => {
 						if matches!(group, Some(g) if g != ep.group) {
 							panic!("group {:?} != ep.group {}", group, ep.group);
 						}
-						self.groups.pop_back();
+						self.groups.pop();
 					},
 				}
 				if self.pos == ep.pos {
@@ -346,22 +346,22 @@ mod tests {
 
 	fn test_group_stack(endpoints: &[EndPoint]) -> Result<(), Box<dyn Error>> {
 		use EndPointType::*;
-		let mut group_stack = VecDeque::new();
+		let mut group_stack = Vec::new();
 		endpoints.iter().map(|ep| {
 			match ep.etype {
 				Start => {
-					group_stack.push_back(ep.group);
+					group_stack.push(ep.group);
 					Ok(())
 				},
 				End => {
-					let group = group_stack.back().copied();
+					let group = group_stack.last().copied();
 					if let Some(group) = group {
 						if group != ep.group {
 	return Err(Box::from(format!(
 		"Wrong group! Expected {}, got {}",
 		group, ep.group)));
 						}
-						group_stack.pop_back();
+						group_stack.pop();
 						Ok(())
 					} else {
 						Err(Box::from(format!("Empty group stack!")))
