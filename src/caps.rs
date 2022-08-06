@@ -33,7 +33,7 @@ pub struct CaptureInfoFillIter {
 impl CaptureInfoFillIter {
 	pub fn new(citems: Vec<InputCaptureInfo>, text_len: usize) -> Self {
 		let mut items = CaptureInfoFillIter::endpoint_list(&citems);
-		items.sort_unstable();
+		items.sort();
 		if cfg!(test) {
 			println!("\n\n\n\n\n{:?}", items);
 		}
@@ -92,8 +92,22 @@ impl PartialOrd for EndPoint {
 		if let Some(Equal) = pos_order {
 			let gorder = self.group.partial_cmp(&other.group);
 			match (self.etype, other.etype) {
-				(Start, _) => gorder,
-				(End, _) => gorder.map(Ordering::reverse),
+				(Start, Start) => gorder,
+				(Start, End) => {
+					if let Some(Equal) = gorder {
+						Some(Less)
+					} else {
+						gorder
+					}
+				},
+				(End, Start) => {
+					if let Some(Equal) = gorder {
+						Some(Greater)
+					} else {
+						gorder.map(Ordering::reverse)
+					}
+				},
+				(End, End) => gorder.map(Ordering::reverse),
 			}
 		} else {
 			pos_order
@@ -128,6 +142,23 @@ impl Iterator for CaptureInfoFillIter {
 							panic!("group {:?} != ep.group {}", group, ep.group);
 						}
 						self.groups.pop();
+						/*
+// Just in case I need it...
+if let Some(g) = group {
+	if g == ep.group {
+		// Optimization: pop group from end of list
+		self.groups.pop();
+	} else {
+		let pos = self.groups.iter()
+			.position(|&gr| gr == g);
+		if let Some(pos) = pos {
+			self.groups.remove(pos);
+		} else {
+			panic!("Group {} not in groups!", g);
+		}
+	}
+}
+					*/
 					},
 				}
 				if self.pos == ep.pos {
@@ -220,8 +251,8 @@ mod tests {
 	#[test]
 	fn string_regex() -> Result<(), Box<dyn Error>> {
 		use onig::Regex;
-		let regex = Regex::new("(\\w+)\\s")?;
-		let test_text = "Three words panic";
+		let regex = Regex::new("(if|for|)")?;
+		let test_text = "if forked for";
 		let text_len = test_text.len();
 		let test_captures = regex.captures_iter(test_text).enumerate()
 		.flat_map(|(cap_group, found)| {
@@ -364,7 +395,7 @@ mod tests {
 						group_stack.pop();
 						Ok(())
 					} else {
-						Err(Box::from(format!("Empty group stack!")))
+						Err(Box::from("Empty group stack!"))
 					}
 				}
 			}
