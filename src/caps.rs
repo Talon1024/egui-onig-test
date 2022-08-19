@@ -92,7 +92,14 @@ impl PartialOrd for EndPoint {
 		if let Some(Equal) = pos_order {
 			let gorder = self.group.partial_cmp(&other.group);
 			match (self.etype, other.etype) {
-				(Start, Start) => gorder,
+				(Start, Start) => {
+					if let Some(Equal) = gorder {
+						panic!("Why are there two starts for the same group \
+							at the same position? This should not happen!");
+					} else {
+						gorder
+					}
+				},
 				(Start, End) => {
 					if let Some(Equal) = gorder {
 						Some(Less)
@@ -107,7 +114,14 @@ impl PartialOrd for EndPoint {
 						gorder.map(Ordering::reverse)
 					}
 				},
-				(End, End) => gorder.map(Ordering::reverse),
+				(End, End) => {
+					if let Some(Equal) = gorder {
+						panic!("Why are there two ends for the same group \
+						at the same position? This should not happen!");
+					} else {
+						gorder.map(Ordering::reverse)
+					}
+				},
 			}
 		} else {
 			pos_order

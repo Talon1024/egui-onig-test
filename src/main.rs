@@ -6,6 +6,7 @@ use std::{
 use egui::text::LayoutJob;
 pub mod caps;
 use caps::*;
+use egui::text::LayoutSection;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -36,12 +37,18 @@ fn hue_to_rgb(hue: f32) -> Color32 {
 }
 
 #[derive(Default)]
+struct TestCaptures {
+	text_len: usize,
+	captures: Option<Vec<CaptureInfo>>,
+}
+
+#[derive(Default)]
 struct MyEguiApp {
 	regex_str: String,
 	regex: Option<Regex>,
 	regex_error: String,
 	test_text: String,
-	test_captures: Option<Vec<CaptureInfo>>,
+	test_captures: TestCaptures,
 	test_text_monospace: bool, // TODO: Make this a FontId
 	test_text_size: f32,
 }
@@ -61,7 +68,6 @@ impl MyEguiApp {
 
 impl eframe::App for MyEguiApp {
 	fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-
 		// Update whenever regex or test_text changes
 		let update_text = |regex: Option<&Regex>, test_text: &str| {
 			let text_len = test_text.len();
@@ -76,9 +82,15 @@ impl eframe::App for MyEguiApp {
 					test_captures, text_len).collect();
 				// print!("\n\n\n\n\n\n\n==========\n\n");
 				// dbg!(&test_captures);
-				Some(test_captures)
+				TestCaptures {
+					text_len: test_text.len(),
+					captures: Some(test_captures)
+				}
 			} else {
-				None
+				TestCaptures {
+					text_len: test_text.len(),
+					captures: None
+				}
 			}
 		};
 		let update_regex = |regex_pattern: &str, test_text: &str| {
@@ -135,36 +147,48 @@ impl eframe::App for MyEguiApp {
 			ui.label("Test text:");
 			egui::ScrollArea::vertical().show(ui, |ui| {
 				let mut layouter = |ui: &egui::Ui, text: &str, wrap_width| {
-					let mut layout_job = LayoutJob::default();
-					layout_job.wrap.max_width = wrap_width;
+					let font_id = match self.test_text_monospace {
+						true => FontId::monospace(self.test_text_size),
+						false => FontId::proportional(self.test_text_size)
+					};
+					let get_colour = |hue| {
+						match hue {
+							v if v > 0. && v <= HUE_MAX => hue_to_rgb(hue),
+							_ => ui.style().visuals.text_color(),
+						}
+					};
 					let coloured_format = |hue| {
 						TextFormat {
-							color: match hue {
-								v if v > 0. && v <= HUE_MAX => hue_to_rgb(hue),
-								_ => ui.style().visuals.text_color(),
-							},
-							font_id: match self.test_text_monospace {
-								true => FontId::monospace(self.test_text_size),
-								false => FontId::proportional(self.test_text_size)
-							},
+							color: get_colour(hue),
+							font_id: font_id.clone(),
 							..Default::default()
 						}
 					};
-					if let Some(caps) = self.test_captures.as_ref() {
-						caps.iter().for_each(|cap| {
-							let range = cap.range.0..cap.range.1;
-							let hue = match cap.group {
-								Some(g) => HUE_MIN * ((g + 1) as f32).rem_euclid(HUE_MAX),
-								None => 0.,
-							};
-							if let Some(tslice) = text.get(range) {
-								layout_job.append(tslice, 0.,
-									coloured_format(hue));
-							}
-						});
+					let shortened = self.test_captures.text_len > text.len();
+					let highlights = self.test_captures.captures.is_some();
+					let layout_job = if highlights && !shortened {
+						let mut layout_job = LayoutJob::default();
+						layout_job.text += text;
+						layout_job.wrap.max_width = wrap_width;
+						if let Some(caps) = self.test_captures.captures.as_ref() {
+							layout_job.text.push(' ');
+							caps.iter().for_each(|cap| {
+								let range = cap.range.0..cap.range.1;
+								let hue = match cap.group {
+									Some(g) => HUE_MIN * ((g + 1) as f32).rem_euclid(HUE_MAX),
+									None => 0.,
+								};
+								layout_job.sections.push(LayoutSection {
+									leading_space: 0.,
+									byte_range: range,
+									format: coloured_format(hue),
+								});
+							});
+						}
+						layout_job
 					} else {
-						layout_job.append(text, 0., coloured_format(0.));
-					}
+						LayoutJob::simple(text.to_string(), font_id.clone(), get_colour(0.), wrap_width)
+					};
 					ui.fonts().layout_job(layout_job)
 				};
 				let text_edit = egui::TextEdit::multiline(&mut self.test_text)
