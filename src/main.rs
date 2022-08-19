@@ -164,7 +164,7 @@ impl eframe::App for MyEguiApp {
 							..Default::default()
 						}
 					};
-					let shortened = self.test_captures.text_len > text.len();
+					let shortened = self.test_captures.text_len != text.len();
 					let highlights = self.test_captures.captures.is_some();
 					let layout_job = if highlights && !shortened {
 						let mut layout_job = LayoutJob::default();
