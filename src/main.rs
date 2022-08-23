@@ -171,7 +171,6 @@ impl eframe::App for MyEguiApp {
 						layout_job.text += text;
 						layout_job.wrap.max_width = wrap_width;
 						if let Some(caps) = self.test_captures.captures.as_ref() {
-							layout_job.text.push(' ');
 							caps.iter().for_each(|cap| {
 								let range = cap.range.0..cap.range.1;
 								let hue = match cap.group {
